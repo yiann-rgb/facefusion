@@ -15,6 +15,7 @@ from facefusion.types import Detection, DownloadScope, DownloadSet, Fps, Inferen
 from facefusion.vision import detect_video_fps, fit_contain_frame, is_vision_frame, read_image
 
 STREAM_COUNTER = 0
+ENABLE_NSFW_DETECTION = False
 
 
 @lru_cache()
@@ -140,9 +141,11 @@ def collect_model_downloads() -> Tuple[DownloadSet, DownloadSet]:
 
 
 def pre_check() -> bool:
-	model_hash_set, model_source_set = collect_model_downloads()
+	if ENABLE_NSFW_DETECTION:
+		model_hash_set, model_source_set = collect_model_downloads()
+		return conditional_download_hashes(model_hash_set) and conditional_download_sources(model_source_set)
 
-	return conditional_download_hashes(model_hash_set) and conditional_download_sources(model_source_set)
+	return True
 
 
 def analyse_stream(vision_frame : VisionFrame, video_fps : Fps) -> bool:
@@ -160,12 +163,18 @@ def analyse_frame(vision_frame : VisionFrame) -> bool:
 
 @lru_cache()
 def analyse_image(image_path : str) -> bool:
+	if not ENABLE_NSFW_DETECTION:
+		return False
+
 	vision_frame = read_image(image_path)
 	return analyse_frame(vision_frame)
 
 
 @lru_cache()
 def analyse_video(video_path : str, trim_frame_start : int, trim_frame_end : int) -> bool:
+	if not ENABLE_NSFW_DETECTION:
+		return False
+
 	video_fps = detect_video_fps(video_path)
 	frame_range = range(trim_frame_start, trim_frame_end)
 	video_reader = video_manager.get_reader(video_path, 'analyse_video')
@@ -198,6 +207,9 @@ def analyse_video(video_path : str, trim_frame_start : int, trim_frame_end : int
 
 
 def detect_nsfw(vision_frame : VisionFrame) -> bool:
+	if not ENABLE_NSFW_DETECTION:
+		return False
+
 	is_nsfw_1 = detect_with_nsfw_1(vision_frame)
 	is_nsfw_2 = detect_with_nsfw_2(vision_frame)
 	is_nsfw_3 = detect_with_nsfw_3(vision_frame)
